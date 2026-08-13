@@ -18,47 +18,38 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // MongoDB Connection
-
 const connectDB = async () => {
   const uri = process.env.MONGODB_URI;
 
-  if (!uri) {
-    console.error("❌ MONGODB_URI is not configured");
-    process.exit(1);
+  if (uri) {
+    try {
+      await mongoose.connect(uri, { serverSelectionTimeoutMS: 10000 });
+      console.log("✅ MongoDB connected successfully to database!");
+      return;
+    } catch (err) {
+      console.error("❌ MongoDB connection failed:", err.message);
+    }
   }
 
+  // Fallback local or in-memory connection for local dev
   try {
-    await mongoose.connect(uri, {
-      serverSelectionTimeoutMS: 10000
-    });
-
-    console.log("✅ MongoDB connected successfully to database!");
+    const localUri = 'mongodb://localhost:27017/employee-db';
+    await mongoose.connect(localUri, { serverSelectionTimeoutMS: 2000 });
+    console.log(`✅ MongoDB connected to local instance (${localUri})`);
   } catch (err) {
-    console.error("❌ MongoDB connection failed:", err.message);
-    process.exit(1);
+    console.log('ℹ️ Local MongoDB not reachable, starting in-memory MongoDB server...');
+    try {
+      const { MongoMemoryServer } = require('mongodb-memory-server');
+      const mongod = await MongoMemoryServer.create();
+      const mongoUri = mongod.getUri();
+      await mongoose.connect(mongoUri);
+      console.log(`✅ MongoDB connected to MemoryServer at ${mongoUri}`);
+    } catch (memErr) {
+      console.error('❌ Failed to start MongoMemoryServer:', memErr);
+    }
   }
 };
 
-connectDB();
-
-// Fallback local or in-memory connection
-try {
-  const localUri = 'mongodb://localhost:27017/employee-db';
-  await mongoose.connect(localUri, { serverSelectionTimeoutMS: 2000 });
-  console.log(`✅ MongoDB connected to local instance (${localUri})`);
-} catch (err) {
-  console.log('ℹ️ Local MongoDB not reachable, starting in-memory MongoDB server...');
-  try {
-    const { MongoMemoryServer } = require('mongodb-memory-server');
-    const mongod = await MongoMemoryServer.create();
-    const mongoUri = mongod.getUri();
-    await mongoose.connect(mongoUri);
-    console.log(`✅ MongoDB connected to MemoryServer at ${mongoUri}`);
-  } catch (memErr) {
-    console.error('❌ Failed to start MongoMemoryServer:', memErr);
-  }
-}
-;
 connectDB();
 
 // Multer configuration
@@ -226,19 +217,31 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-const PORT = process.env.PORT || 5001;
-
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-});
-
-server.on('error', (err) => {
-  if (err.code === 'EADDRINUSE') {
-    console.warn(`Port ${PORT} is in use. Trying port ${Number(PORT) + 1}...`);
-    app.listen(Number(PORT) + 1, () => {
-      console.log(`Server running on fallback port ${Number(PORT) + 1}`);
-    });
-  } else {
-    console.error('Server startup error:', err);
+// Middleware to ensure DB connection on serverless requests
+app.use(async (req, res, next) => {
+  if (mongoose.connection.readyState < 1) {
+    await connectDB();
   }
+  next();
 });
+
+module.exports = app;
+
+if (!process.env.VERCEL) {
+  const PORT = process.env.PORT || 5001;
+
+  const server = app.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+  });
+
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.warn(`Port ${PORT} is in use. Trying port ${Number(PORT) + 1}...`);
+      app.listen(Number(PORT) + 1, () => {
+        console.log(`Server running on fallback port ${Number(PORT) + 1}`);
+      });
+    } else {
+      console.error('Server startup error:', err);
+    }
+  });
+}
