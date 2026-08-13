@@ -83,20 +83,18 @@ function EmployeeForm({ employee, onSubmit, onCancel }) {
     e.preventDefault();
     if (!validateForm()) return;
 
-    const data = new FormData();
-    data.append('name', formData.name);
-    data.append('email', formData.email);
-    data.append('phone', formData.phone);
-    data.append('department', formData.department);
-    data.append('position', formData.position);
-    data.append('salary', formData.salary);
-    data.append('joinDate', formData.joinDate);
-    
-    if (photoFile) {
-      data.append('photo', photoFile);
-    }
+    const payload = {
+      name: formData.name,
+      email: formData.email,
+      phone: formData.phone,
+      department: formData.department,
+      position: formData.position,
+      salary: Number(formData.salary),
+      joinDate: formData.joinDate,
+      photo: photoPreview || null
+    };
 
-    onSubmit(data);
+    onSubmit(payload);
   };
 
   const departments = ['Engineering', 'Product & Design', 'Marketing', 'Sales', 'Human Resources', 'Finance'];

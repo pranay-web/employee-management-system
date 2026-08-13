@@ -135,18 +135,13 @@ app.get('/api/employees/:id', async (req, res) => {
 });
 
 // CREATE employee
-app.post('/api/employees', uploadPhoto, async (req, res) => {
+app.post('/api/employees', async (req, res) => {
   try {
-    const { name, email, phone, department, position, salary, joinDate } = req.body;
+    const { name, email, phone, department, position, salary, joinDate, photo } = req.body;
 
     // Validate required fields
     if (!name || !email || !phone || !department || !position || !salary || !joinDate) {
       return res.status(400).json({ message: 'All fields are required' });
-    }
-
-    let photoPath = null;
-    if (req.file && req.file.buffer) {
-      photoPath = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
     }
 
     const employee = new Employee({
@@ -156,7 +151,7 @@ app.post('/api/employees', uploadPhoto, async (req, res) => {
       department,
       position,
       salary,
-      photo: photoPath,
+      photo: photo || null,
       joinDate
     });
 
@@ -171,9 +166,9 @@ app.post('/api/employees', uploadPhoto, async (req, res) => {
 });
 
 // UPDATE employee
-app.put('/api/employees/:id', uploadPhoto, async (req, res) => {
+app.put('/api/employees/:id', async (req, res) => {
   try {
-    const { name, email, phone, department, position, salary, joinDate } = req.body;
+    const { name, email, phone, department, position, salary, joinDate, photo } = req.body;
 
     const employee = await Employee.findById(req.params.id);
     if (!employee) return res.status(404).json({ message: 'Employee not found' });
@@ -186,11 +181,7 @@ app.put('/api/employees/:id', uploadPhoto, async (req, res) => {
     if (position) employee.position = position;
     if (salary) employee.salary = salary;
     if (joinDate) employee.joinDate = joinDate;
-
-    // Update photo if new one is uploaded
-    if (req.file && req.file.buffer) {
-      employee.photo = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
-    }
+    if (photo !== undefined) employee.photo = photo;
 
     employee.updatedAt = new Date();
     const updatedEmployee = await employee.save();

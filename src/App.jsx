@@ -55,11 +55,12 @@ function App() {
   }, [employees]);
 
   // Handle add employee
-  const handleAddEmployee = async (formData) => {
+  const handleAddEmployee = async (payload) => {
     try {
       const response = await fetch(`${API_URL}/employees`, {
         method: 'POST',
-        body: formData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
       });
 
       if (response.ok) {
@@ -78,11 +79,12 @@ function App() {
   };
 
   // Handle update employee
-  const handleUpdateEmployee = async (id, formData) => {
+  const handleUpdateEmployee = async (id, payload) => {
     try {
       const response = await fetch(`${API_URL}/employees/${id}`, {
         method: 'PUT',
-        body: formData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
       });
 
       if (response.ok) {
