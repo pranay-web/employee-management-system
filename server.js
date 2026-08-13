@@ -18,36 +18,47 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // MongoDB Connection
+
 const connectDB = async () => {
   const uri = process.env.MONGODB_URI;
-  if (uri && uri !== 'mongodb://localhost:27017/employee-db') {
-    try {
-      await mongoose.connect(uri, { serverSelectionTimeoutMS: 5000 });
-      console.log('✅ MongoDB connected successfully to database!');
-      return;
-    } catch (err) {
-      console.error('⚠️ Could not connect to configured MONGODB_URI:', err.message);
-    }
+
+  if (!uri) {
+    console.error("❌ MONGODB_URI is not configured");
+    process.exit(1);
   }
 
-  // Fallback local or in-memory connection
   try {
-    const localUri = 'mongodb://localhost:27017/employee-db';
-    await mongoose.connect(localUri, { serverSelectionTimeoutMS: 2000 });
-    console.log(`✅ MongoDB connected to local instance (${localUri})`);
+    await mongoose.connect(uri, {
+      serverSelectionTimeoutMS: 10000
+    });
+
+    console.log("✅ MongoDB connected successfully to database!");
   } catch (err) {
-    console.log('ℹ️ Local MongoDB not reachable, starting in-memory MongoDB server...');
-    try {
-      const { MongoMemoryServer } = require('mongodb-memory-server');
-      const mongod = await MongoMemoryServer.create();
-      const mongoUri = mongod.getUri();
-      await mongoose.connect(mongoUri);
-      console.log(`✅ MongoDB connected to MemoryServer at ${mongoUri}`);
-    } catch (memErr) {
-      console.error('❌ Failed to start MongoMemoryServer:', memErr);
-    }
+    console.error("❌ MongoDB connection failed:", err.message);
+    process.exit(1);
   }
 };
+
+connectDB();
+
+// Fallback local or in-memory connection
+try {
+  const localUri = 'mongodb://localhost:27017/employee-db';
+  await mongoose.connect(localUri, { serverSelectionTimeoutMS: 2000 });
+  console.log(`✅ MongoDB connected to local instance (${localUri})`);
+} catch (err) {
+  console.log('ℹ️ Local MongoDB not reachable, starting in-memory MongoDB server...');
+  try {
+    const { MongoMemoryServer } = require('mongodb-memory-server');
+    const mongod = await MongoMemoryServer.create();
+    const mongoUri = mongod.getUri();
+    await mongoose.connect(mongoUri);
+    console.log(`✅ MongoDB connected to MemoryServer at ${mongoUri}`);
+  } catch (memErr) {
+    console.error('❌ Failed to start MongoMemoryServer:', memErr);
+  }
+}
+;
 connectDB();
 
 // Multer configuration
@@ -60,13 +71,13 @@ const storage = multer.diskStorage({
   }
 });
 
-const upload = multer({ 
+const upload = multer({
   storage: storage,
   fileFilter: (req, file, cb) => {
     const allowedTypes = /jpeg|jpg|png|gif/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
     const mimetype = allowedTypes.test(file.mimetype);
-    
+
     if (mimetype && extname) {
       return cb(null, true);
     } else {
@@ -129,7 +140,7 @@ app.get('/api/employees/:id', async (req, res) => {
 app.post('/api/employees', uploadPhoto, async (req, res) => {
   try {
     const { name, email, phone, department, position, salary, joinDate } = req.body;
-    
+
     // Validate required fields
     if (!name || !email || !phone || !department || !position || !salary || !joinDate) {
       return res.status(400).json({ message: 'All fields are required' });
@@ -162,7 +173,7 @@ app.post('/api/employees', uploadPhoto, async (req, res) => {
 app.put('/api/employees/:id', uploadPhoto, async (req, res) => {
   try {
     const { name, email, phone, department, position, salary, joinDate } = req.body;
-    
+
     const employee = await Employee.findById(req.params.id);
     if (!employee) return res.status(404).json({ message: 'Employee not found' });
 
@@ -174,7 +185,7 @@ app.put('/api/employees/:id', uploadPhoto, async (req, res) => {
     if (position) employee.position = position;
     if (salary) employee.salary = salary;
     if (joinDate) employee.joinDate = joinDate;
-    
+
     // Update photo if new one is uploaded
     if (req.file) {
       employee.photo = `/uploads/${req.file.filename}`;
@@ -216,8 +227,9 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 const PORT = process.env.PORT || 5001;
-const server = app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
 });
 
 server.on('error', (err) => {
