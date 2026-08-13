@@ -30,7 +30,7 @@ const connectDB = async () => {
     const uri = process.env.MONGODB_URI;
 
     if (uri) {
-      dbPromise = mongoose.connect(uri, { serverSelectionTimeoutMS: 5000 }).catch(err => {
+      dbPromise = mongoose.connect(uri, { serverSelectionTimeoutMS: 4000, connectTimeoutMS: 4000 }).catch(err => {
         dbPromise = null;
         console.error("❌ MongoDB connection failed:", err.message);
         throw err;
@@ -209,8 +209,8 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'Server is running' });
 });
 
-// Serve frontend static build in production
-if (process.env.NODE_ENV === 'production') {
+// Serve frontend static build in production (non-serverless)
+if (process.env.NODE_ENV === 'production' && !process.env.VERCEL) {
   app.use(express.static(path.join(__dirname, 'dist')));
   app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'dist', 'index.html'));
