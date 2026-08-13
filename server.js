@@ -28,7 +28,13 @@ const connectDB = async () => {
       return;
     } catch (err) {
       console.error("❌ MongoDB connection failed:", err.message);
+      if (process.env.VERCEL) {
+        throw new Error(`MongoDB connection error: ${err.message}`);
+      }
     }
+  } else if (process.env.VERCEL) {
+    console.error("❌ MONGODB_URI Environment Variable is missing in Vercel Project Settings!");
+    throw new Error("MONGODB_URI Environment Variable is missing in Vercel Dashboard");
   }
 
   // Fallback local or in-memory connection for local dev
