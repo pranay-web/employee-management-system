@@ -58,27 +58,21 @@ const connectDB = async () => {
 
 connectDB();
 
-// Multer configuration
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, 'uploads/');
-  },
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + path.extname(file.originalname));
-  }
-});
+// Multer configuration (MemoryStorage for Vercel & Read-only FS compatibility)
+const storage = multer.memoryStorage();
 
 const upload = multer({
   storage: storage,
+  limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    const allowedTypes = /jpeg|jpg|png|gif/;
+    const allowedTypes = /jpeg|jpg|png|gif|webp/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
     const mimetype = allowedTypes.test(file.mimetype);
 
     if (mimetype && extname) {
       return cb(null, true);
     } else {
-      cb('Error: Images only (jpeg, jpg, png, gif)');
+      cb(new Error('Images only (jpeg, jpg, png, gif, webp)'));
     }
   }
 });
@@ -86,9 +80,7 @@ const upload = multer({
 const uploadPhoto = (req, res, next) => {
   upload.single('photo')(req, res, (err) => {
     if (err) {
-      console.warn('Multer upload warning:', err);
-      // Gracefully continue without uploaded file on non-critical stream issue
-      return next();
+      console.warn('Multer upload warning:', err.message || err);
     }
     next();
   });
@@ -143,7 +135,10 @@ app.post('/api/employees', uploadPhoto, async (req, res) => {
       return res.status(400).json({ message: 'All fields are required' });
     }
 
-    const photoPath = req.file ? `/uploads/${req.file.filename}` : null;
+    let photoPath = null;
+    if (req.file && req.file.buffer) {
+      photoPath = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+    }
 
     const employee = new Employee({
       name,
@@ -184,8 +179,8 @@ app.put('/api/employees/:id', uploadPhoto, async (req, res) => {
     if (joinDate) employee.joinDate = joinDate;
 
     // Update photo if new one is uploaded
-    if (req.file) {
-      employee.photo = `/uploads/${req.file.filename}`;
+    if (req.file && req.file.buffer) {
+      employee.photo = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
     }
 
     employee.updatedAt = new Date();
