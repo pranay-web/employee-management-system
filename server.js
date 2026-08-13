@@ -17,6 +17,9 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 // Serve uploaded files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
+// Disable buffering so Mongoose returns immediate errors if not connected
+mongoose.set('bufferCommands', false);
+
 // MongoDB Connection
 let dbPromise = null;
 
@@ -27,7 +30,7 @@ const connectDB = async () => {
     const uri = process.env.MONGODB_URI;
 
     if (uri) {
-      dbPromise = mongoose.connect(uri, { serverSelectionTimeoutMS: 10000 }).catch(err => {
+      dbPromise = mongoose.connect(uri, { serverSelectionTimeoutMS: 5000 }).catch(err => {
         dbPromise = null;
         console.error("❌ MongoDB connection failed:", err.message);
         throw err;
