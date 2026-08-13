@@ -30,7 +30,11 @@ const connectDB = async () => {
     const uri = process.env.MONGODB_URI;
 
     if (uri) {
-      dbPromise = mongoose.connect(uri, { serverSelectionTimeoutMS: 4000, connectTimeoutMS: 4000 }).catch(err => {
+      dbPromise = mongoose.connect(uri, { 
+        serverSelectionTimeoutMS: 4000, 
+        connectTimeoutMS: 4000,
+        socketTimeoutMS: 5000
+      }).catch(err => {
         dbPromise = null;
         console.error("❌ MongoDB connection failed:", err.message);
         throw err;
