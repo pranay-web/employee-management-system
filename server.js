@@ -21,53 +21,50 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 mongoose.set('bufferCommands', false);
 
 // MongoDB Connection
-let dbPromise = null;
-
 const connectDB = async () => {
   if (mongoose.connection.readyState >= 1) return;
 
-  if (!dbPromise) {
-    const uri = process.env.MONGODB_URI;
+  const uri = process.env.MONGODB_URI;
 
-    if (uri) {
-      dbPromise = mongoose.connect(uri, { serverSelectionTimeoutMS: 5000 }).catch(err => {
-        dbPromise = null;
-        console.error("❌ MongoDB connection failed:", err.message);
-        throw err;
-      });
-    } else if (process.env.VERCEL) {
-      console.error("❌ MONGODB_URI Environment Variable is missing in Vercel Project Settings!");
-      throw new Error("MONGODB_URI Environment Variable is missing in Vercel Dashboard");
-    } else {
-      // Fallback local or in-memory connection for local dev
-      dbPromise = (async () => {
-        try {
-          const localUri = 'mongodb://localhost:27017/employee-db';
-          await mongoose.connect(localUri, { serverSelectionTimeoutMS: 2000 });
-          console.log(`✅ MongoDB connected to local instance (${localUri})`);
-        } catch (err) {
-          console.log('ℹ️ Local MongoDB not reachable, starting in-memory MongoDB server...');
-          const { MongoMemoryServer } = require('mongodb-memory-server');
-          const mongod = await MongoMemoryServer.create();
-          const mongoUri = mongod.getUri();
-          await mongoose.connect(mongoUri);
-          console.log(`✅ MongoDB connected to MemoryServer at ${mongoUri}`);
-        }
-      })();
+  if (uri) {
+    try {
+      await mongoose.connect(uri, { serverSelectionTimeoutMS: 5000 });
+      console.log("✅ MongoDB connected successfully to database!");
+      return;
+    } catch (err) {
+      console.error("❌ MongoDB connection failed:", err.message);
+      return;
     }
   }
 
-  await dbPromise;
+  if (process.env.VERCEL) {
+    console.warn("⚠️ MONGODB_URI is not set in Vercel Environment Variables");
+    return;
+  }
+
+  // Fallback local or in-memory connection for local dev
+  try {
+    const localUri = 'mongodb://localhost:27017/employee-db';
+    await mongoose.connect(localUri, { serverSelectionTimeoutMS: 2000 });
+    console.log(`✅ MongoDB connected to local instance (${localUri})`);
+  } catch (err) {
+    console.log('ℹ️ Local MongoDB not reachable, starting in-memory MongoDB server...');
+    try {
+      const { MongoMemoryServer } = require('mongodb-memory-server');
+      const mongod = await MongoMemoryServer.create();
+      const mongoUri = mongod.getUri();
+      await mongoose.connect(mongoUri);
+      console.log(`✅ MongoDB connected to MemoryServer at ${mongoUri}`);
+    } catch (memErr) {
+      console.error('❌ Failed to start MongoMemoryServer:', memErr);
+    }
+  }
 };
 
 // Ensure DB is connected BEFORE any API routes execute
 app.use(async (req, res, next) => {
-  try {
-    await connectDB();
-    next();
-  } catch (err) {
-    res.status(500).json({ message: err.message || "Database connection error" });
-  }
+  await connectDB();
+  next();
 });
 
 // Multer configuration (MemoryStorage for Vercel & Read-only FS compatibility)
