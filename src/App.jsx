@@ -21,23 +21,44 @@ function App() {
     }, 4000);
   };
 
-  // Fetch all employees
-  const fetchEmployees = async () => {
+  // Fetch all employees with automatic retry for cold starts
+  const fetchEmployees = async (retries = 3) => {
     setLoading(true);
-    try {
-      const response = await fetch(`${API_URL}/employees`);
-      if (response.ok) {
-        const data = await response.json();
-        setEmployees(data);
-      } else {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 8000);
+        
+        const response = await fetch(`${API_URL}/employees`, {
+          signal: controller.signal
+        });
+        clearTimeout(timeout);
+        
+        if (response.ok) {
+          const data = await response.json();
+          setEmployees(data);
+          setLoading(false);
+          return;
+        }
+        
+        // Server returned an error - retry if attempts remain
+        if (attempt < retries) {
+          console.log(`Attempt ${attempt} failed (HTTP ${response.status}), retrying in 2s...`);
+          await new Promise(r => setTimeout(r, 2000));
+          continue;
+        }
         showNotification('Failed to load employee list', 'error');
+      } catch (error) {
+        if (attempt < retries) {
+          console.log(`Attempt ${attempt} failed (${error.name}), retrying in 2s...`);
+          await new Promise(r => setTimeout(r, 2000));
+          continue;
+        }
+        console.error('Error fetching employees:', error);
+        showNotification('Server is waking up. Please refresh the page.', 'error');
       }
-    } catch (error) {
-      console.error('Error fetching employees:', error);
-      showNotification('Server connection error. Check backend status.', 'error');
-    } finally {
-      setLoading(false);
     }
+    setLoading(false);
   };
 
   useEffect(() => {
