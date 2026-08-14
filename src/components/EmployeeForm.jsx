@@ -219,14 +219,14 @@ function EmployeeForm({ employee, onSubmit, onCancel }) {
             </div>
 
             <div className="input-group">
-              <label htmlFor="salary">Annual Compensation (₹) *</label>
+              <label htmlFor="salary">Monthly Salary (₹) *</label>
               <input
                 type="number"
                 id="salary"
                 name="salary"
                 value={formData.salary}
                 onChange={handleChange}
-                placeholder="120000"
+                placeholder="25000"
                 className={errors.salary ? 'error-border' : ''}
               />
               {errors.salary && <span className="field-error">{errors.salary}</span>}

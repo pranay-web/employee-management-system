@@ -79,7 +79,7 @@ function EmployeeList({ employees, loading, onEdit, onDelete }) {
             <span className="sort-label">Sort:</span>
             <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="sort-select">
               <option value="name">Name (A-Z)</option>
-              <option value="salary">Salary (High to Low)</option>
+              <option value="salary">Monthly Salary (High to Low)</option>
               <option value="joinDate">Recent Joiners</option>
             </select>
           </div>
@@ -176,7 +176,7 @@ function EmployeeList({ employees, loading, onEdit, onDelete }) {
                   </div>
                   <div className="info-row highlight-row">
                     <span className="row-icon">💰</span>
-                    <span className="row-val salary-text">₹{Number(employee.salary).toLocaleString()} / yr</span>
+                    <span className="row-val salary-text">₹{Number(employee.salary).toLocaleString()} / month</span>
                   </div>
                 </div>
 
@@ -200,7 +200,7 @@ function EmployeeList({ employees, loading, onEdit, onDelete }) {
                 <th>Department</th>
                 <th>Position</th>
                 <th>Contact</th>
-                <th>Salary</th>
+                <th>Monthly Salary</th>
                 <th>Join Date</th>
                 <th>Actions</th>
               </tr>

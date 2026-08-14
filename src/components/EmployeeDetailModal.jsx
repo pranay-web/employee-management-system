@@ -53,7 +53,7 @@ function EmployeeDetailModal({ employee, onClose, onEdit, onDelete }) {
             <div className="info-card">
               <span className="info-icon">💰</span>
               <div className="info-text">
-                <label>Annual Compensation</label>
+                <label>Monthly Salary</label>
                 <span className="salary-highlight">₹{Number(employee.salary).toLocaleString()}</span>
               </div>
             </div>

@@ -68,11 +68,11 @@ function App() {
   // Calculate statistics
   const stats = useMemo(() => {
     const totalCount = employees.length;
-    const totalPayroll = employees.reduce((sum, e) => sum + (Number(e.salary) || 0), 0);
-    const avgSalary = totalCount > 0 ? Math.round(totalPayroll / totalCount) : 0;
+    const totalMonthlyPayroll = employees.reduce((sum, e) => sum + (Number(e.salary) || 0), 0);
+    const avgMonthlySalary = totalCount > 0 ? Math.round(totalMonthlyPayroll / totalCount) : 0;
     const depts = new Set(employees.map(e => e.department).filter(Boolean)).size;
 
-    return { totalCount, totalPayroll, avgSalary, depts };
+    return { totalCount, totalMonthlyPayroll, avgMonthlySalary, depts };
   }, [employees]);
 
   // Handle add employee with retry for cold starts
@@ -239,16 +239,16 @@ function App() {
           <div className="stat-card">
             <div className="stat-icon-wrapper emerald">💰</div>
             <div className="stat-info">
-              <span className="stat-label">Total Annual Payroll</span>
-              <span className="stat-value">₹{stats.totalPayroll.toLocaleString()}</span>
+              <span className="stat-label">Total Monthly Payroll</span>
+              <span className="stat-value">₹{stats.totalMonthlyPayroll.toLocaleString()}</span>
             </div>
           </div>
 
           <div className="stat-card">
             <div className="stat-icon-wrapper violet">📊</div>
             <div className="stat-info">
-              <span className="stat-label">Average Salary</span>
-              <span className="stat-value">₹{stats.avgSalary.toLocaleString()}</span>
+              <span className="stat-label">Average Monthly Salary</span>
+              <span className="stat-value">₹{stats.avgMonthlySalary.toLocaleString()}</span>
             </div>
           </div>
         </div>
