@@ -27,7 +27,7 @@ async function connectDB() {
     return cached.conn;
   }
 
-  const uri = process.env.MONGODB_URI;
+  const uri = process.env.MONGODB_URI?.replace('w=majorit7', 'w=majority');
 
   if (!uri) {
     if (process.env.VERCEL) {
