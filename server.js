@@ -17,51 +17,44 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 // Serve uploaded files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Disable buffering so Mongoose returns immediate errors if not connected
-mongoose.set('bufferCommands', false);
-
 // MongoDB Connection
-let isConnecting = false;
+let connPromise = null;
 
 const connectDB = async () => {
   if (mongoose.connection.readyState === 1) return;
 
-  const uri = process.env.MONGODB_URI;
-  if (!uri) {
-    if (process.env.VERCEL) {
-      console.warn("⚠️ MONGODB_URI is missing in Vercel Environment Variables");
-      return;
-    }
-    // Local dev fallback
-    try {
-      const localUri = 'mongodb://localhost:27017/employee-db';
-      await mongoose.connect(localUri, { serverSelectionTimeoutMS: 2000 });
-      console.log(`✅ MongoDB connected to local instance`);
-      return;
-    } catch (err) {
-      console.log('ℹ️ Local MongoDB not reachable, starting in-memory MongoDB server...');
-      const { MongoMemoryServer } = require('mongodb-memory-server');
-      const mongod = await MongoMemoryServer.create();
-      await mongoose.connect(mongod.getUri());
-      return;
+  if (!connPromise) {
+    const uri = process.env.MONGODB_URI;
+    if (!uri) {
+      if (process.env.VERCEL) {
+        console.warn("⚠️ MONGODB_URI is missing in Vercel Environment Variables");
+        return;
+      }
+      connPromise = (async () => {
+        try {
+          await mongoose.connect('mongodb://localhost:27017/employee-db', { serverSelectionTimeoutMS: 2000 });
+          console.log(`✅ MongoDB connected to local instance`);
+        } catch (err) {
+          console.log('ℹ️ Local MongoDB not reachable, starting in-memory MongoDB server...');
+          const { MongoMemoryServer } = require('mongodb-memory-server');
+          const mongod = await MongoMemoryServer.create();
+          await mongoose.connect(mongod.getUri());
+          console.log(`✅ MongoDB connected to MongoMemoryServer`);
+        }
+      })();
+    } else {
+      connPromise = mongoose.connect(uri, {
+        serverSelectionTimeoutMS: 5000,
+        connectTimeoutMS: 5000
+      }).catch(err => {
+        connPromise = null;
+        console.error("❌ MongoDB connection error:", err.message);
+        throw err;
+      });
     }
   }
 
-  if (isConnecting) return;
-  isConnecting = true;
-
-  try {
-    await mongoose.connect(uri, { 
-      serverSelectionTimeoutMS: 3000, 
-      connectTimeoutMS: 3000,
-      socketTimeoutMS: 3000
-    });
-    console.log("✅ MongoDB connected successfully!");
-  } catch (err) {
-    console.error("❌ MongoDB connection error:", err.message);
-  } finally {
-    isConnecting = false;
-  }
+  await connPromise;
 };
 
 // Ensure DB is connected BEFORE any API routes execute
