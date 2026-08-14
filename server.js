@@ -3,7 +3,6 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const path = require('path');
-const multer = require('multer');
 
 dotenv.config();
 
@@ -14,82 +13,77 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// Serve uploaded files
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// ============================================================
+// MongoDB Connection — Vercel-optimized with global caching
+// Uses global.mongoose to persist connection across warm starts
+// ============================================================
+let cached = global._mongooseCache;
+if (!cached) {
+  cached = global._mongooseCache = { conn: null, promise: null };
+}
 
-// MongoDB Connection
-let connPromise = null;
+async function connectDB() {
+  if (cached.conn && mongoose.connection.readyState === 1) {
+    return cached.conn;
+  }
 
-const connectDB = async () => {
-  if (mongoose.connection.readyState === 1) return;
+  const uri = process.env.MONGODB_URI;
 
-  if (!connPromise) {
-    const uri = process.env.MONGODB_URI;
-    if (!uri) {
-      if (process.env.VERCEL) {
-        console.warn("⚠️ MONGODB_URI is missing in Vercel Environment Variables");
-        return;
-      }
-      connPromise = (async () => {
-        try {
-          await mongoose.connect('mongodb://localhost:27017/employee-db', { serverSelectionTimeoutMS: 2000 });
-          console.log(`✅ MongoDB connected to local instance`);
-        } catch (err) {
-          console.log('ℹ️ Local MongoDB not reachable, starting in-memory MongoDB server...');
-          const { MongoMemoryServer } = require('mongodb-memory-server');
-          const mongod = await MongoMemoryServer.create();
-          await mongoose.connect(mongod.getUri());
-          console.log(`✅ MongoDB connected to MongoMemoryServer`);
-        }
-      })();
-    } else {
-      connPromise = mongoose.connect(uri, {
-        serverSelectionTimeoutMS: 5000,
-        connectTimeoutMS: 5000
-      }).catch(err => {
-        connPromise = null;
-        console.error("❌ MongoDB connection error:", err.message);
-        throw err;
+  if (!uri) {
+    if (process.env.VERCEL) {
+      console.error('❌ MONGODB_URI is not set in Vercel Environment Variables');
+      return null;
+    }
+    // Local dev fallback
+    try {
+      cached.conn = await mongoose.connect('mongodb://localhost:27017/employee-db', {
+        serverSelectionTimeoutMS: 2000
       });
+      console.log('✅ MongoDB connected to local instance');
+      return cached.conn;
+    } catch (err) {
+      console.log('ℹ️ Local MongoDB not available, using in-memory server...');
+      const { MongoMemoryServer } = require('mongodb-memory-server');
+      const mongod = await MongoMemoryServer.create();
+      cached.conn = await mongoose.connect(mongod.getUri());
+      console.log('✅ MongoDB connected to MongoMemoryServer');
+      return cached.conn;
     }
   }
 
-  await connPromise;
-};
-
-// Ensure DB is connected BEFORE any API routes execute
-app.use(async (req, res, next) => {
-  await connectDB();
-  next();
-});
-
-// Multer configuration (MemoryStorage for Vercel & Read-only FS compatibility)
-const storage = multer.memoryStorage();
-
-const upload = multer({
-  storage: storage,
-  limits: { fileSize: 5 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => {
-    const allowedTypes = /jpeg|jpg|png|gif|webp/;
-    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = allowedTypes.test(file.mimetype);
-
-    if (mimetype && extname) {
-      return cb(null, true);
-    } else {
-      cb(new Error('Images only (jpeg, jpg, png, gif, webp)'));
-    }
+  if (!cached.promise) {
+    cached.promise = mongoose.connect(uri, {
+      serverSelectionTimeoutMS: 8000,
+      connectTimeoutMS: 8000,
+    }).then((m) => {
+      console.log('✅ MongoDB Atlas connected!');
+      return m;
+    }).catch((err) => {
+      cached.promise = null;
+      console.error('❌ MongoDB connection error:', err.message);
+      throw err;
+    });
   }
-});
 
-const uploadPhoto = (req, res, next) => {
-  upload.single('photo')(req, res, (err) => {
-    if (err) {
-      console.warn('Multer upload warning:', err.message || err);
-    }
+  try {
+    cached.conn = await cached.promise;
+  } catch (err) {
+    cached.promise = null;
+    throw err;
+  }
+
+  return cached.conn;
+}
+
+// DB middleware — runs before every API request
+app.use('/api', async (req, res, next) => {
+  try {
+    await connectDB();
     next();
-  });
-};
+  } catch (err) {
+    res.status(503).json({ message: 'Database connection failed. Please try again.' });
+  }
+});
 
 // Employee Schema
 const employeeSchema = new mongoose.Schema({
@@ -105,9 +99,11 @@ const employeeSchema = new mongoose.Schema({
   updatedAt: { type: Date, default: Date.now }
 });
 
-const Employee = mongoose.model('Employee', employeeSchema);
+const Employee = mongoose.models.Employee || mongoose.model('Employee', employeeSchema);
 
-// Routes
+// ============================================================
+// API Routes
+// ============================================================
 
 // GET all employees
 app.get('/api/employees', async (req, res) => {
@@ -135,18 +131,12 @@ app.post('/api/employees', async (req, res) => {
   try {
     const { name, email, phone, department, position, salary, joinDate, photo } = req.body;
 
-    // Validate required fields
     if (!name || !email || !phone || !department || !position || !salary || !joinDate) {
       return res.status(400).json({ message: 'All fields are required' });
     }
 
     const employee = new Employee({
-      name,
-      email,
-      phone,
-      department,
-      position,
-      salary,
+      name, email, phone, department, position, salary,
       photo: photo || null,
       joinDate
     });
@@ -155,7 +145,7 @@ app.post('/api/employees', async (req, res) => {
     res.status(201).json(savedEmployee);
   } catch (error) {
     if (error.code === 11000) {
-      return res.status(400).json({ message: 'An employee with this email address already exists.' });
+      return res.status(400).json({ message: 'An employee with this email already exists.' });
     }
     res.status(400).json({ message: error.message });
   }
@@ -169,7 +159,6 @@ app.put('/api/employees/:id', async (req, res) => {
     const employee = await Employee.findById(req.params.id);
     if (!employee) return res.status(404).json({ message: 'Employee not found' });
 
-    // Update fields
     if (name) employee.name = name;
     if (email) employee.email = email;
     if (phone) employee.phone = phone;
@@ -184,7 +173,7 @@ app.put('/api/employees/:id', async (req, res) => {
     res.json(updatedEmployee);
   } catch (error) {
     if (error.code === 11000) {
-      return res.status(400).json({ message: 'An employee with this email address already exists.' });
+      return res.status(400).json({ message: 'An employee with this email already exists.' });
     }
     res.status(400).json({ message: error.message });
   }
@@ -203,10 +192,10 @@ app.delete('/api/employees/:id', async (req, res) => {
 
 // Health check
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'Server is running' });
+  res.json({ status: 'ok', db: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected' });
 });
 
-// Serve frontend static build in production (non-serverless)
+// Serve frontend in production (local only, Vercel handles static files itself)
 if (process.env.NODE_ENV === 'production' && !process.env.VERCEL) {
   app.use(express.static(path.join(__dirname, 'dist')));
   app.get('*', (req, res) => {
@@ -216,21 +205,18 @@ if (process.env.NODE_ENV === 'production' && !process.env.VERCEL) {
 
 module.exports = app;
 
+// Start server locally (not on Vercel)
 if (!process.env.VERCEL) {
   const PORT = process.env.PORT || 5001;
-
   const server = app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
   });
-
   server.on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
-      console.warn(`Port ${PORT} is in use. Trying port ${Number(PORT) + 1}...`);
+      console.warn(`Port ${PORT} in use, trying ${Number(PORT) + 1}...`);
       app.listen(Number(PORT) + 1, () => {
-        console.log(`Server running on fallback port ${Number(PORT) + 1}`);
+        console.log(`Server running on port ${Number(PORT) + 1}`);
       });
-    } else {
-      console.error('Server startup error:', err);
     }
   });
 }
