@@ -75,27 +75,51 @@ function App() {
     return { totalCount, totalPayroll, avgSalary, depts };
   }, [employees]);
 
-  // Handle add employee
+  // Handle add employee with retry for cold starts
   const handleAddEmployee = async (payload) => {
-    try {
-      const response = await fetch(`${API_URL}/employees`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+    // Strip photo if too large (>2MB base64) to avoid timeouts
+    const cleanPayload = { ...payload };
+    if (cleanPayload.photo && cleanPayload.photo.length > 2 * 1024 * 1024) {
+      cleanPayload.photo = null;
+    }
 
-      if (response.ok) {
-        const newEmployee = await response.json();
-        setEmployees([newEmployee, ...employees]);
-        setShowForm(false);
-        showNotification(`Added ${newEmployee.name} to team!`, 'success');
-      } else {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 9000);
+
+        const response = await fetch(`${API_URL}/employees`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(cleanPayload),
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+
+        if (response.ok) {
+          const newEmployee = await response.json();
+          setEmployees([newEmployee, ...employees]);
+          setShowForm(false);
+          showNotification(`Added ${newEmployee.name} to team! 🎉`, 'success');
+          return;
+        }
+
         const errData = await response.json().catch(() => ({}));
+        if (attempt < 3) {
+          console.log(`Add attempt ${attempt} failed (${response.status}), retrying...`);
+          await new Promise(r => setTimeout(r, 2000));
+          continue;
+        }
         showNotification(errData.message || 'Failed to add employee', 'error');
+      } catch (error) {
+        if (attempt < 3) {
+          console.log(`Add attempt ${attempt} timed out, retrying...`);
+          await new Promise(r => setTimeout(r, 2000));
+          continue;
+        }
+        console.error('Error adding employee:', error);
+        showNotification('Server is busy. Please try again.', 'error');
       }
-    } catch (error) {
-      console.error('Error adding employee:', error);
-      showNotification('Network error while creating employee', 'error');
     }
   };
 
